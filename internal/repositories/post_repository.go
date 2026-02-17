@@ -11,7 +11,7 @@ import (
 type PostRepository interface {
 	FindAll(page, pageSize int, onlyPosted bool) ([]models.Post, int64, error)
 	FindBySlug(slug string, onlyPosted bool) (*models.Post, error)
-	// FindByID(id uint) (*models.Post, error)
+	FindByID(id uint) (*models.Post, error)
 	Create(post *models.Post) error
 	Update(post *models.Post) error
 	Delete(id uint) error
@@ -52,6 +52,12 @@ func (r *postRepository) FindBySlug(slug string, onlyPosted bool) (*models.Post,
 		query = query.Where("posted_at IS NOT NULL AND posted_at <= ?", time.Now())
 	}
 	err := query.Preload("Tags").Preload("Categories").First(&post).Error
+	return &post, err
+}
+
+func (r *postRepository) FindByID(id uint) (*models.Post, error) {
+	var post models.Post
+	err := r.db.Preload("Tags").Preload("Categories").First(&post, id).Error
 	return &post, err
 }
 
