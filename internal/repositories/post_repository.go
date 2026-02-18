@@ -35,7 +35,8 @@ func (r *postRepository) FindAll(page, pageSize int, onlyPosted bool) ([]models.
 
 	query := r.db.Model(&models.Post{})
 	if onlyPosted {
-		query = query.Where("posted_at IS NOT NULL AND posted_at <= ?", time.Now())
+		now := time.Now().UTC()
+		query = query.Where("posted_at IS NOT NULL AND posted_at <= ?", now)
 	}
 
 	query.Count(&total)

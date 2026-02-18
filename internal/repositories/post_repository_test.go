@@ -207,3 +207,56 @@ func TestPostRepository_Search(t *testing.T) {
 		assert.Empty(t, res)
 	})
 }
+
+func TestPostRepository_FindAll(t *testing.T) {
+	db := SetupTestDB()
+	repo := repositories.NewPostRepository(db)
+
+	now := time.Now().UTC()
+	past := now.Add(-48 * time.Hour)
+	future := now.Add(48 * time.Hour)
+
+	// Seed de Tags/Categorias para validar Preload no FindAll
+	tag := models.Tag{Title: "Go"}
+	cat := models.Category{Title: "Backend"}
+	db.Create(&tag)
+	db.Create(&cat)
+
+	// Seed de Posts
+	posts := []models.Post{
+		{Title: "Antigo", Slug: "antigo", PostedAt: &past, Tags: []models.Tag{tag}},
+		{Title: "Recente", Slug: "recente", PostedAt: &now, Categories: []models.Category{cat}},
+		{Title: "Futuro", Slug: "futuro", PostedAt: &future},
+		{Title: "Draft", Slug: "draft", PostedAt: nil},
+	}
+
+	for i := range posts {
+		db.Create(&posts[i])
+	}
+
+	t.Run("Deve listar apenas postados e respeitar ordem decrescente de data", func(t *testing.T) {
+		res, total, err := repo.FindAll(1, 10, true)
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), total) // Antigo e Recente
+		assert.Len(t, res, 2)
+
+		// Ordem 'posted_at desc': Recente (index 0) deve vir antes de Antigo (index 1)
+		assert.Equal(t, "Recente", res[0].Title)
+		assert.Equal(t, "Antigo", res[1].Title)
+
+		// Validar se o Preload funcionou na listagem
+		assert.NotEmpty(t, res[0].Categories, "Post 'Recente' deveria ter categoria carregada")
+		assert.NotEmpty(t, res[1].Tags, "Post 'Antigo' deveria ter tag carregada")
+	})
+
+	t.Run("Deve retornar lista vazia e total zero se não houver postados", func(t *testing.T) {
+		// Limpar posts postados para este sub-teste
+		db.Where("posted_at IS NOT NULL").Delete(&models.Post{})
+
+		res, total, err := repo.FindAll(1, 10, true)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), total)
+		assert.Empty(t, res)
+	})
+}
