@@ -134,6 +134,25 @@ func TestPostRepository(t *testing.T) {
 		assert.NotEmpty(t, updated.Tags)
 		assert.NotEmpty(t, updated.Categories)
 	})
+
+	t.Run("Deve realizar Soft Delete corretamente", func(t *testing.T) {
+		p := &models.Post{Title: "Deletar", Slug: "deletar"}
+		db.Create(p)
+
+		err := repo.Delete(p.ID)
+		assert.NoError(t, err)
+
+		// FindByID não deve encontrar
+		found, err := repo.FindByID(p.ID)
+		assert.Error(t, err)
+		assert.EqualError(t, err, "record not found")
+		assert.Nil(t, found)
+
+		// Verificar se continua no banco via Unscoped (Prova do Soft Delete)
+		var check models.Post
+		db.Unscoped().First(&check, p.ID)
+		assert.NotZero(t, check.DeletedAt)
+	})
 }
 
 func TestPostRepository_Search(t *testing.T) {

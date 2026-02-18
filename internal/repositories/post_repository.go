@@ -57,7 +57,6 @@ func (r *postRepository) FindBySlug(slug string, onlyPosted bool) (*models.Post,
 	// O GORM preencherá o ponteiro se encontrar o registro
 	err := query.Preload("Tags").Preload("Categories").First(&post).Error
 	if err != nil {
-		// Se deu erro (RecordNotFound ou outro), retornamos nil explicitamente
 		return nil, err
 	}
 
@@ -67,7 +66,12 @@ func (r *postRepository) FindBySlug(slug string, onlyPosted bool) (*models.Post,
 func (r *postRepository) FindByID(id uint) (*models.Post, error) {
 	var post *models.Post
 	err := r.db.Preload("Tags").Preload("Categories").First(&post, id).Error
-	return post, err
+
+	if err != nil {
+		return nil, err
+	}
+
+	return post, nil
 }
 
 func (r *postRepository) Create(post *models.Post) error {
