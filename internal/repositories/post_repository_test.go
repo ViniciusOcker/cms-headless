@@ -105,4 +105,86 @@ func TestPostRepository(t *testing.T) {
 		assert.Len(t, pUpdated.Categories, 1)
 		assert.Equal(t, "DevOps", pUpdated.Categories[0].Title)
 	})
+
+	t.Run("Deve substituir tags via Association Replace", func(t *testing.T) {
+		newCat := models.Tag{Title: "DevOps"}
+		db.Create(&newCat)
+
+		p, _ := repo.FindBySlug("aprendendo-go", false)
+
+		err := repo.ReplaceTags(p, []models.Tag{newCat})
+		assert.NoError(t, err)
+
+		// Recarregar e validar
+		pUpdated, _ := repo.FindByID(p.ID)
+		assert.Len(t, pUpdated.Tags, 1)
+		assert.Equal(t, "DevOps", pUpdated.Tags[0].Title)
+	})
+
+	t.Run("Deve mudar o titulo e slug para MESH e manter associações", func(t *testing.T) {
+		item, err := repo.FindBySlug("aprendendo-go", false)
+		assert.NoError(t, err)
+		item.Title = "MESH"
+		item.Slug = "mesh"
+		err = repo.Update(item)
+		assert.NoError(t, err)
+		updated, _ := repo.FindByID(1)
+		assert.Equal(t, "MESH", updated.Title)
+		assert.Equal(t, "mesh", updated.Slug)
+		assert.NotEmpty(t, updated.Tags)
+		assert.NotEmpty(t, updated.Categories)
+	})
+}
+
+func TestPostRepository_Search(t *testing.T) {
+	db := SetupTestDB()
+	repo := repositories.NewPostRepository(db)
+	now := time.Now().UTC()
+
+	// Seed: Criar Tags e Categorias
+	t1 := models.Tag{Title: "Go"}
+	t2 := models.Tag{Title: "JS"}
+	c1 := models.Category{Title: "Backend"}
+	db.Create(&t1)
+	db.Create(&t2)
+	db.Create(&c1)
+
+	// Seed: Criar Posts
+	p1 := models.Post{Title: "Mastering Go", Tags: []models.Tag{t1}, Categories: []models.Category{c1}, PostedAt: &now}
+	p2 := models.Post{Title: "Learning JS", Tags: []models.Tag{t2}, PostedAt: &now}
+	db.Create(&p1)
+	db.Create(&p2)
+
+	t.Run("Deve filtrar por Categoria e Tag simultaneamente", func(t *testing.T) {
+		// Slugs únicos são obrigatórios
+		p1 := models.Post{Title: "Mastering Go", Slug: "mastering-go", Tags: []models.Tag{t1}, Categories: []models.Category{c1}, PostedAt: &now}
+		p2 := models.Post{Title: "Learning JS", Slug: "learning-js", Tags: []models.Tag{t2}, PostedAt: &now}
+		db.Create(&p1)
+		db.Create(&p2)
+
+		res, total, err := repo.Search(1, 10, c1.ID, t1.ID, "", true)
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), total)
+		// Se o total for > 0, aí sim acessamos o índice 0 para evitar panic
+		if assert.NotEmpty(t, res) {
+			assert.Equal(t, "Mastering Go", res[0].Title)
+		}
+	})
+
+	t.Run("Deve filtrar por texto no título", func(t *testing.T) {
+		res, total, err := repo.Search(1, 10, 0, 0, "Learning", true)
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), total)
+		assert.Equal(t, "Learning JS", res[0].Title)
+	})
+
+	t.Run("Não deve retornar nada para busca sem resultados", func(t *testing.T) {
+		res, total, err := repo.Search(1, 10, 999, 0, "", true)
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), total)
+		assert.Empty(t, res)
+	})
 }

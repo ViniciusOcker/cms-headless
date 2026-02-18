@@ -18,6 +18,7 @@ type PostRepository interface {
 	SetPostedAt(id uint, t *time.Time) error
 	ReplaceTags(post *models.Post, tags []models.Tag) error
 	ReplaceCategories(post *models.Post, categories []models.Category) error
+	Search(page, pageSize int, categoryID, tagID uint, queryText string, onlyPosted bool) ([]models.Post, int64, error)
 }
 
 type postRepository struct {
@@ -91,4 +92,42 @@ func (r *postRepository) ReplaceTags(post *models.Post, tags []models.Tag) error
 
 func (r *postRepository) ReplaceCategories(post *models.Post, categories []models.Category) error {
 	return r.db.Model(post).Association("Categories").Replace(categories)
+}
+
+func (r *postRepository) Search(page, pageSize int, categoryID, tagID uint, queryText string, onlyPosted bool) ([]models.Post, int64, error) {
+	var posts []models.Post
+	var total int64
+
+	query := r.db.Model(&models.Post{})
+
+	if categoryID > 0 {
+		query = query.Joins("JOIN post_categories ON post_categories.post_id = posts.id").
+			Where("post_categories.category_id = ?", categoryID)
+	}
+	if tagID > 0 {
+		query = query.Joins("JOIN post_tags ON post_tags.post_id = posts.id").
+			Where("post_tags.tag_id = ?", tagID)
+	}
+
+	if queryText != "" {
+		// Importante: especificar posts.title para evitar ambiguidade com tags.title
+		query = query.Where("posts.title LIKE ? OR posts.short_description LIKE ?", "%"+queryText+"%", "%"+queryText+"%")
+	}
+
+	if onlyPosted {
+		query = query.Where("posts.posted_at IS NOT NULL AND posts.posted_at <= ?", time.Now().UTC())
+	}
+
+	// Contagem distinta para não contar o mesmo post múltiplas vezes devido aos joins
+	query.Distinct("posts.id").Count(&total)
+
+	// No Find, selecionamos apenas as colunas de posts para o Scan correto
+	err := query.Select("posts.*").
+		Scopes(utils.PaginateRepository(page, pageSize)).
+		Preload("Tags").
+		Preload("Categories").
+		Order("posts.posted_at desc").
+		Find(&posts).Error
+
+	return posts, total, err
 }
