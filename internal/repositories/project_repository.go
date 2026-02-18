@@ -16,7 +16,6 @@ type ProjectRepository interface {
 	Update(project *models.Project) error
 	Delete(id uint) error
 	SetPostedAt(id uint, t *time.Time) error
-	Filter(page, pageSize int, categoryID uint, tagID uint, onlyPosted bool) ([]models.Project, int64, error)
 	ReplaceTags(project *models.Project, tags []models.Tag) error
 	ReplaceCategories(project *models.Project, categories []models.Category) error
 }
@@ -35,7 +34,8 @@ func (r *projectRepository) FindAll(page, pageSize int, onlyPosted bool) ([]mode
 
 	query := r.db.Model(&models.Project{})
 	if onlyPosted {
-		query = query.Where("posted_at IS NOT NULL AND posted_at <= ?", time.Now())
+		now := time.Now().UTC()
+		query = query.Where("posted_at IS NOT NULL AND posted_at <= ?", now)
 	}
 
 	query.Count(&total)
@@ -98,32 +98,6 @@ func (r *projectRepository) Delete(id uint) error {
 func (r *projectRepository) SetPostedAt(id uint, t *time.Time) error {
 	// Se t for nil, o GORM define como NULL no banco (remove a postagem)
 	return r.db.Model(&models.Project{}).Where("id = ?", id).Update("posted_at", t).Error
-}
-
-func (r *projectRepository) Filter(page, pageSize int, categoryID uint, tagID uint, onlyPosted bool) ([]models.Project, int64, error) {
-	var projects []models.Project
-	var total int64
-
-	query := r.db.Model(&models.Project{}).
-		Joins("JOIN project_categories on project_categories.project_id = projects.id").
-		Joins("JOIN project_tags on project_tags.project_id = projects.id").
-		Distinct("projects.*")
-
-	if categoryID > 0 {
-		query = query.Where("project_categories.category_id = ?", categoryID)
-	}
-	if tagID > 0 {
-		query = query.Where("project_tags.tag_id = ?", tagID)
-	}
-	if onlyPosted {
-		query = query.Where("posted_at IS NOT NULL")
-	}
-
-	query.Count(&total)
-	err := query.Scopes(utils.PaginateRepository(page, pageSize)).
-		Preload("Tags").Preload("Categories").Find(&projects).Error
-
-	return projects, total, err
 }
 
 func (r *projectRepository) Create(project *models.Project) error {

@@ -178,3 +178,56 @@ func TestProjectRepository(t *testing.T) {
 		assert.NotEmpty(t, updated.Tags)
 	})
 }
+
+func TestProjectRepository_FindAll(t *testing.T) {
+	db := SetupTestDB()
+	repo := repositories.NewProjectRepository(db)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	past := now.Add(-24 * time.Hour)  // Ontem
+	future := now.Add(24 * time.Hour) // Amanhã
+
+	// Seed de Dados
+	projects := []models.Project{
+		{Title: "Passado", Slug: "p", PostedAt: &past},
+		{Title: "Agora", Slug: "a", PostedAt: &now},
+		{Title: "Futuro", Slug: "f", PostedAt: &future},
+		{Title: "Rascunho", Slug: "r", PostedAt: nil},
+	}
+
+	for _, p := range projects {
+		db.Create(&p)
+	}
+
+	t.Run("Modo Público (onlyPosted=true): Deve ignorar rascunhos e datas futuras", func(t *testing.T) {
+		// Apenas 'Passado' e 'Agora' devem aparecer
+		res, total, err := repo.FindAll(1, 10, true)
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), total, "Total deve ser 2 (passado e agora)")
+		assert.Len(t, res, 2)
+
+		// Verificar se o 'Futuro' ou 'Rascunho' não vazaram para a lista
+		for _, p := range res {
+			assert.NotEqual(t, "Futuro", p.Title)
+			assert.NotEqual(t, "Rascunho", p.Title)
+		}
+	})
+
+	t.Run("Modo Admin (onlyPosted=false): Deve listar absolutamente tudo", func(t *testing.T) {
+		res, total, err := repo.FindAll(1, 10, false)
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(4), total, "Total deve ser 4 no modo admin")
+		assert.Len(t, res, 4)
+	})
+
+	t.Run("Paginação: Deve respeitar o limite e reportar o total correto", func(t *testing.T) {
+		// Pedindo página 1 com apenas 1 item (modo admin)
+		res, total, err := repo.FindAll(1, 1, false)
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(4), total, "O total continua sendo 4 independente do limite da página")
+		assert.Len(t, res, 1)
+	})
+}
