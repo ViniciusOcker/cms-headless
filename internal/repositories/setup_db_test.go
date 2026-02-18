@@ -1,4 +1,4 @@
-package utils
+package repositories_test
 
 import (
 	"cms-headless/internal/models"
@@ -8,7 +8,7 @@ import (
 )
 
 func SetupTestDB() *gorm.DB {
-	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, _ := gorm.Open(sqlite.Open(""), &gorm.Config{})
 	db.AutoMigrate(&models.Category{})
 	db.AutoMigrate(&models.Post{})
 	db.AutoMigrate(&models.Project{})

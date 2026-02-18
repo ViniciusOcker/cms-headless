@@ -46,19 +46,27 @@ func (r *postRepository) FindAll(page, pageSize int, onlyPosted bool) ([]models.
 }
 
 func (r *postRepository) FindBySlug(slug string, onlyPosted bool) (*models.Post, error) {
-	var post models.Post
-	query := r.db.Where("slug = ?", slug)
+	var post *models.Post // Começa como nil
+	query := r.db.Model(&models.Post{}).Where("slug = ?", slug)
+
 	if onlyPosted {
 		query = query.Where("posted_at IS NOT NULL AND posted_at <= ?", time.Now())
 	}
+
+	// O GORM preencherá o ponteiro se encontrar o registro
 	err := query.Preload("Tags").Preload("Categories").First(&post).Error
-	return &post, err
+	if err != nil {
+		// Se deu erro (RecordNotFound ou outro), retornamos nil explicitamente
+		return nil, err
+	}
+
+	return post, nil
 }
 
 func (r *postRepository) FindByID(id uint) (*models.Post, error) {
-	var post models.Post
+	var post *models.Post
 	err := r.db.Preload("Tags").Preload("Categories").First(&post, id).Error
-	return &post, err
+	return post, err
 }
 
 func (r *postRepository) Create(post *models.Post) error {

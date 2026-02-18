@@ -51,28 +51,35 @@ func (r *projectRepository) FindAll(page, pageSize int, onlyPosted bool) ([]mode
 }
 
 func (r *projectRepository) FindBySlug(slug string, onlyPosted bool) (*models.Project, error) {
-	var project models.Project
+	var project models.Project // Use a struct, não o ponteiro diretamente aqui
 	query := r.db.Where("slug = ?", slug)
 
 	if onlyPosted {
-		query = query.Where("posted_at IS NOT NULL AND posted_at <= ?", time.Now())
+		// Truncamos para segundos para garantir compatibilidade total com SQLite/Postgres
+		now := time.Now().UTC()
+		query = query.Where("posted_at IS NOT NULL AND posted_at <= ?", now)
 	}
 
 	err := query.Preload("Tags").Preload("Categories").First(&project).Error
+
 	if err != nil {
 		return nil, err
 	}
+
 	return &project, nil
 }
 
 func (r *projectRepository) FindByID(id uint) (*models.Project, error) {
 	var project models.Project
 	err := r.db.Preload("Tags").Preload("Categories").First(&project, id).Error
-	return &project, err
+	if err != nil {
+		return nil, err
+	}
+
+	return &project, nil
 }
 
 func (r *projectRepository) Update(project *models.Project) error {
-	// Full save inclui a atualização das tabelas de junção (Many-to-Many)
 	return r.db.Save(project).Error
 }
 
